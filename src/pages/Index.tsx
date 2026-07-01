@@ -1,24 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Icon from '@/components/ui/icon';
 import { toast } from '@/hooks/use-toast';
+import Logo from '@/components/Logo';
+import AdminPanel from '@/components/AdminPanel';
+import { API, COUNTRIES, flagOf, type Post } from '@/lib/mcfa';
 
 const HERO_IMG =
   'https://cdn.poehali.dev/projects/03c39951-0df9-473a-9e75-b8e2a7af085a/files/1514e7b3-fe3b-4a86-b1a9-87b6f1549f23.jpg';
@@ -33,100 +31,92 @@ const NAV = [
 ];
 
 const STANDINGS = [
-  { pos: 1, team: 'Pyongyang Blocks', p: 5, w: 5, d: 0, l: 0, gd: '+18', pts: 15 },
-  { pos: 2, team: 'Redstone United', p: 5, w: 4, d: 1, l: 0, gd: '+12', pts: 13 },
-  { pos: 3, team: 'Diamond FC', p: 5, w: 3, d: 1, l: 1, gd: '+7', pts: 10 },
-  { pos: 4, team: 'Creeper City', p: 5, w: 2, d: 2, l: 1, gd: '+3', pts: 8 },
-  { pos: 5, team: 'Nether Rangers', p: 5, w: 1, d: 1, l: 3, gd: '-5', pts: 4 },
-  { pos: 6, team: 'End Portal SC', p: 5, w: 0, d: 1, l: 4, gd: '-14', pts: 1 },
-];
-
-const NEWS = [
-  {
-    tag: 'Церемония',
-    date: '15 июня 2026',
-    title: 'MCFA 2026 официально открыт в Пхеньяне',
-    text: 'Грандиозная церемония открытия чемпионата собрала более 200 команд со всего мира на воксельной арене.',
-  },
-  {
-    tag: 'Матч дня',
-    date: '18 июня 2026',
-    title: 'Pyongyang Blocks разгромили End Portal SC 6:0',
-    text: 'Хозяева турнира показали блестящую игру и уверенно возглавили турнирную таблицу группы А.',
-  },
-  {
-    tag: 'Правила',
-    date: '12 июня 2026',
-    title: 'Опубликован регламент серверных матчей',
-    text: 'Все участники обязаны использовать официальную сборку клиента и соблюдать fair-play на поле.',
-  },
+  { pos: 1, team: 'КНДР', p: 5, w: 5, d: 0, l: 0, gd: '+18', pts: 15 },
+  { pos: 2, team: 'Россия', p: 5, w: 4, d: 1, l: 0, gd: '+12', pts: 13 },
+  { pos: 3, team: 'Китай', p: 5, w: 3, d: 1, l: 1, gd: '+7', pts: 10 },
+  { pos: 4, team: 'Иран', p: 5, w: 2, d: 2, l: 1, gd: '+3', pts: 8 },
+  { pos: 5, team: 'Сербия', p: 5, w: 1, d: 1, l: 3, gd: '-5', pts: 4 },
+  { pos: 6, team: 'Египет', p: 5, w: 0, d: 1, l: 4, gd: '-14', pts: 1 },
 ];
 
 const STREAMS = [
-  { live: true, teams: 'Pyongyang Blocks — Diamond FC', time: 'Идёт сейчас', viewers: '4 812' },
-  { live: false, teams: 'Redstone United — Creeper City', time: 'Сегодня 19:00', viewers: '—' },
-  { live: false, teams: 'Nether Rangers — End Portal SC', time: 'Завтра 17:30', viewers: '—' },
+  { live: true, teams: 'КНДР — Китай', time: 'Идёт сейчас', viewers: '4 812' },
+  { live: false, teams: 'Россия — Иран', time: 'Сегодня 19:00', viewers: '—' },
+  { live: false, teams: 'Сербия — Египет', time: 'Завтра 17:30', viewers: '—' },
 ];
 
-type Applicant = {
-  id: number;
-  nick: string;
-  team: string;
-  status: 'pending' | 'approved' | 'rejected';
-};
-
 const Index = () => {
-  const [applicants, setApplicants] = useState<Applicant[]>([
-    { id: 1, nick: 'Steve_Kim', team: 'Pyongyang Blocks', status: 'pending' },
-    { id: 2, nick: 'CreeperKing', team: 'Creeper City', status: 'approved' },
-    { id: 3, nick: 'RedstoneRy', team: 'Redstone United', status: 'pending' },
-  ]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [nick, setNick] = useState('');
+  const [country, setCountry] = useState('');
+  const [roleWish, setRoleWish] = useState('');
+  const [skin, setSkin] = useState<string | null>(null);
+  const [skinName, setSkinName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const scrollTo = (id: string) => {
+  const loadPosts = useCallback(async () => {
+    const res = await fetch(`${API}?action=posts`);
+    if (res.ok) setPosts((await res.json()).posts);
+  }, []);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  const scrollTo = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+
+  const onSkinPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'image/png') {
+      toast({ title: 'Скин должен быть в формате PNG', variant: 'destructive' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSkin(reader.result as string);
+      setSkinName(file.name);
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleRegister = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const nick = String(data.get('nick') || '').trim();
-    const team = String(data.get('team') || '').trim();
-    if (!nick || !team) return;
-    setApplicants((prev) => [
-      ...prev,
-      { id: Date.now(), nick, team, status: 'pending' },
-    ]);
-    toast({
-      title: 'Заявка отправлена!',
-      description: 'Ваша регистрация ожидает подтверждения администратором.',
+    if (!nick.trim() || !country) {
+      toast({ title: 'Укажите ник и страну', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+    const res = await fetch(`${API}?action=register`, {
+      method: 'POST',
+      body: JSON.stringify({ nick, country, role_wish: roleWish, skin }),
     });
-    form.reset();
+    setSubmitting(false);
+    if (res.ok) {
+      toast({
+        title: 'Заявка отправлена!',
+        description: 'Ожидайте подтверждения администратором.',
+      });
+      setNick('');
+      setCountry('');
+      setRoleWish('');
+      setSkin(null);
+      setSkinName('');
+      if (fileRef.current) fileRef.current.value = '';
+    } else {
+      toast({ title: 'Ошибка отправки', variant: 'destructive' });
+    }
   };
-
-  const setStatus = (id: number, status: Applicant['status']) => {
-    setApplicants((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status } : a)),
-    );
-  };
-
-  const pendingCount = applicants.filter((a) => a.status === 'pending').length;
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <button
-            onClick={() => scrollTo('home')}
-            className="flex items-center gap-2"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded bg-dprk-red">
-              <Icon name="Trophy" size={20} className="text-white" />
-            </div>
-            <span className="font-display text-2xl font-bold tracking-tight">
-              MCFA<span className="text-dprk-red">.</span>26
-            </span>
+          <button onClick={() => scrollTo('home')}>
+            <Logo className="h-10" />
           </button>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -142,19 +132,13 @@ const Index = () => {
           </nav>
 
           <div className="flex items-center gap-2">
-            <AdminPanel
-              applicants={applicants}
-              setStatus={setStatus}
-              pendingCount={pendingCount}
-            />
+            <AdminPanel onPostsChange={loadPosts} />
             <Button
               onClick={() => scrollTo('register')}
               className="hidden bg-dprk-red text-white hover:bg-dprk-red/90 sm:inline-flex"
             >
               Участвовать
             </Button>
-
-            {/* Mobile menu */}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="outline" size="icon" className="md:hidden">
@@ -188,14 +172,9 @@ const Index = () => {
       {/* Hero */}
       <section id="home" className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <img
-            src={HERO_IMG}
-            alt="Стадион MCFA"
-            className="h-full w-full object-cover"
-          />
+          <img src={HERO_IMG} alt="Стадион MCFA" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-dprk-blue/70 to-dprk-blue/40" />
         </div>
-
         <div className="container relative mx-auto px-4 py-24 md:py-36">
           <div className="max-w-3xl animate-fade-in">
             <Badge className="mb-6 border-0 bg-dprk-red text-white hover:bg-dprk-red">
@@ -205,43 +184,30 @@ const Index = () => {
             <h1 className="font-display text-5xl font-bold uppercase leading-none text-white md:text-7xl">
               Чемпионат мира
               <br />
-              по футболу в{' '}
-              <span className="text-dprk-red">Minecraft</span>
+              по футболу в <span className="text-dprk-red">Minecraft</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg text-white/85">
-              MCFA 2026 — главный турнир года. 200+ команд, воксельные стадионы,
+              MCFA 2026 — главный турнир года. 16 сборных, воксельные стадионы,
               прямые трансляции матчей и путь к чемпионскому кубку.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button
-                size="lg"
-                onClick={() => scrollTo('register')}
-                className="bg-dprk-red text-white hover:bg-dprk-red/90"
-              >
+              <Button size="lg" onClick={() => scrollTo('register')} className="bg-dprk-red text-white hover:bg-dprk-red/90">
                 <Icon name="UserPlus" size={18} className="mr-2" />
                 Зарегистрироваться
               </Button>
-              <Button
-                size="lg"
-                onClick={() => scrollTo('streams')}
-                variant="outline"
-                className="border-white/40 bg-white/10 text-white backdrop-blur hover:bg-white/20 hover:text-white"
-              >
+              <Button size="lg" onClick={() => scrollTo('streams')} variant="outline" className="border-white/40 bg-white/10 text-white backdrop-blur hover:bg-white/20 hover:text-white">
                 <Icon name="Radio" size={18} className="mr-2" />
                 Смотреть трансляции
               </Button>
             </div>
-
             <div className="mt-12 grid max-w-lg grid-cols-3 gap-4">
               {[
-                { n: '200+', l: 'Команд' },
+                { n: '16', l: 'Сборных' },
                 { n: '48', l: 'Матчей' },
                 { n: '12', l: 'Стадионов' },
               ].map((s) => (
                 <div key={s.l} className="border-l-2 border-dprk-red pl-3">
-                  <div className="font-display text-3xl font-bold text-white">
-                    {s.n}
-                  </div>
+                  <div className="font-display text-3xl font-bold text-white">{s.n}</div>
                   <div className="text-sm text-white/70">{s.l}</div>
                 </div>
               ))}
@@ -256,14 +222,15 @@ const Index = () => {
           <div>
             <SectionTitle sub="Заявка">Регистрация участника</SectionTitle>
             <p className="mt-4 max-w-md text-muted-foreground">
-              Заполните форму, чтобы подать заявку на участие в MCFA 2026. После
-              проверки администратором вы получите доступ к профилю участника.
+              Выберите сборную, загрузите свой скин в развёрнутом формате и укажите,
+              кем хотите быть на поле. После проверки администратором вы попадёте
+              в официальный реестр MCFA 2026.
             </p>
             <ul className="mt-8 space-y-4">
               {[
-                { icon: 'ShieldCheck', t: 'Модерация заявок', d: 'Каждый участник проходит проверку админом.' },
-                { icon: 'Users', t: 'Командный зачёт', d: 'Играйте за свою команду в групповом этапе.' },
-                { icon: 'Award', t: 'Официальный статус', d: 'Одобренные участники попадают в реестр MCFA.' },
+                { icon: 'Flag', t: '16 сборных', d: 'Выберите страну, за которую играете.' },
+                { icon: 'Image', t: 'Ваш скин', d: 'Загрузите PNG-файл скина Minecraft.' },
+                { icon: 'ShieldCheck', t: 'Модерация', d: 'Заявки одобряет администратор турнира.' },
               ].map((f) => (
                 <li key={f.t} className="flex gap-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-dprk-blue/10 text-dprk-blue">
@@ -282,22 +249,62 @@ const Index = () => {
             <form onSubmit={handleRegister} className="space-y-5">
               <div>
                 <Label htmlFor="nick">Игровой ник *</Label>
-                <Input id="nick" name="nick" placeholder="Steve_Kim" className="mt-1.5" required />
+                <Input id="nick" value={nick} onChange={(e) => setNick(e.target.value)} placeholder="Steve_Kim" className="mt-1.5" />
               </div>
               <div>
-                <Label htmlFor="team">Название команды *</Label>
-                <Input id="team" name="team" placeholder="Pyongyang Blocks" className="mt-1.5" required />
+                <Label>Сборная (страна) *</Label>
+                <Select value={country} onValueChange={setCountry}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Выберите страну" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>
+                        {c.flag} {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" placeholder="player@mcfa.kp" className="mt-1.5" />
+                <Label htmlFor="role">Кем хотите быть?</Label>
+                <Textarea
+                  id="role"
+                  value={roleWish}
+                  onChange={(e) => setRoleWish(e.target.value)}
+                  placeholder="Например: нападающий, капитан команды, вратарь..."
+                  className="mt-1.5"
+                  rows={2}
+                />
               </div>
               <div>
-                <Label htmlFor="about">О себе</Label>
-                <Textarea id="about" name="about" placeholder="Опыт, позиция на поле, достижения..." className="mt-1.5" rows={3} />
+                <Label>Скин Minecraft (PNG, развёрнутый формат)</Label>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png"
+                  onChange={onSkinPick}
+                  className="hidden"
+                  id="skin-input"
+                />
+                <label
+                  htmlFor="skin-input"
+                  className="mt-1.5 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border p-3 transition-colors hover:border-dprk-red"
+                >
+                  {skin ? (
+                    <img src={skin} alt="Скин" className="h-16 w-12 rounded border border-border object-cover [image-rendering:pixelated]" />
+                  ) : (
+                    <div className="flex h-16 w-12 items-center justify-center rounded bg-muted text-muted-foreground">
+                      <Icon name="Upload" size={20} />
+                    </div>
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    {skinName || 'Нажмите, чтобы загрузить PNG-файл скина'}
+                  </span>
+                </label>
               </div>
-              <Button type="submit" className="w-full bg-dprk-red text-white hover:bg-dprk-red/90">
-                Подать заявку
+              <Button type="submit" disabled={submitting} className="w-full bg-dprk-red text-white hover:bg-dprk-red/90">
+                {submitting ? 'Отправка...' : 'Подать заявку'}
               </Button>
             </form>
           </div>
@@ -313,7 +320,7 @@ const Index = () => {
               <thead>
                 <tr className="border-b border-border bg-dprk-blue text-white">
                   <th className="px-4 py-3 font-medium">#</th>
-                  <th className="px-4 py-3 font-medium">Команда</th>
+                  <th className="px-4 py-3 font-medium">Сборная</th>
                   <th className="px-4 py-3 text-center font-medium">И</th>
                   <th className="px-4 py-3 text-center font-medium">В</th>
                   <th className="px-4 py-3 text-center font-medium">Н</th>
@@ -326,15 +333,11 @@ const Index = () => {
                 {STANDINGS.map((r) => (
                   <tr key={r.pos} className="border-b border-border last:border-0 hover:bg-muted/50">
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold ${
-                          r.pos <= 2 ? 'bg-dprk-red text-white' : 'bg-muted text-foreground'
-                        }`}
-                      >
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold ${r.pos <= 2 ? 'bg-dprk-red text-white' : 'bg-muted text-foreground'}`}>
                         {r.pos}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold">{r.team}</td>
+                    <td className="px-4 py-3 font-semibold">{flagOf(r.team)} {r.team}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{r.p}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{r.w}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{r.d}</td>
@@ -355,10 +358,7 @@ const Index = () => {
           <SectionTitle sub="Live">Трансляции матчей</SectionTitle>
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {STREAMS.map((s, i) => (
-              <div
-                key={i}
-                className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-lg"
-              >
+              <div key={i} className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-lg">
                 <div className="relative flex aspect-video items-center justify-center bg-dprk-blue">
                   <Icon name="Play" size={44} className="text-white/80 transition-transform group-hover:scale-110" />
                   {s.live ? (
@@ -367,22 +367,14 @@ const Index = () => {
                       LIVE
                     </span>
                   ) : (
-                    <span className="absolute left-3 top-3 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white">
-                      Скоро
-                    </span>
+                    <span className="absolute left-3 top-3 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white">Скоро</span>
                   )}
                 </div>
                 <div className="p-4">
                   <div className="font-semibold">{s.teams}</div>
                   <div className="mt-1 flex items-center justify-between text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Icon name="Clock" size={14} /> {s.time}
-                    </span>
-                    {s.live && (
-                      <span className="flex items-center gap-1">
-                        <Icon name="Eye" size={14} /> {s.viewers}
-                      </span>
-                    )}
+                    <span className="flex items-center gap-1"><Icon name="Clock" size={14} /> {s.time}</span>
+                    {s.live && <span className="flex items-center gap-1"><Icon name="Eye" size={14} /> {s.viewers}</span>}
                   </div>
                 </div>
               </div>
@@ -395,26 +387,26 @@ const Index = () => {
       <section id="news" className="border-b border-border bg-muted/30 py-20">
         <div className="container mx-auto px-4">
           <SectionTitle sub="Блог">Новости турнира</SectionTitle>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {NEWS.map((n) => (
-              <article
-                key={n.title}
-                className="flex flex-col rounded-xl border border-border bg-card p-6 transition-shadow hover:shadow-lg"
-              >
-                <div className="mb-3 flex items-center gap-3">
-                  <Badge className="border-0 bg-dprk-red/10 text-dprk-red hover:bg-dprk-red/10">
-                    {n.tag}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{n.date}</span>
-                </div>
-                <h3 className="font-display text-xl font-semibold leading-tight">{n.title}</h3>
-                <p className="mt-2 flex-1 text-sm text-muted-foreground">{n.text}</p>
-                <button className="mt-4 flex items-center gap-1 text-sm font-medium text-dprk-blue hover:underline">
-                  Читать <Icon name="ArrowRight" size={14} />
-                </button>
-              </article>
-            ))}
-          </div>
+          {posts.length === 0 ? (
+            <p className="mt-8 text-muted-foreground">Новостей пока нет. Скоро здесь появятся первые публикации.</p>
+          ) : (
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              {posts.map((n) => (
+                <article key={n.id} className="flex flex-col rounded-xl border border-border bg-card p-6 transition-shadow hover:shadow-lg">
+                  <div className="mb-3 flex items-center gap-3">
+                    {n.tag && (
+                      <Badge className="border-0 bg-dprk-red/10 text-dprk-red hover:bg-dprk-red/10">{n.tag}</Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(n.created_at).toLocaleDateString('ru-RU')}
+                    </span>
+                  </div>
+                  <h3 className="font-display text-xl font-semibold leading-tight">{n.title}</h3>
+                  <p className="mt-2 flex-1 whitespace-pre-line text-sm text-muted-foreground">{n.body}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -424,8 +416,7 @@ const Index = () => {
           <div>
             <SectionTitle light sub="Связь">Контакты</SectionTitle>
             <p className="mt-4 max-w-md text-white/75">
-              Есть вопросы по участию, трансляциям или партнёрству? Свяжитесь с
-              оргкомитетом MCFA 2026.
+              Есть вопросы по участию, трансляциям или партнёрству? Свяжитесь с оргкомитетом MCFA 2026.
             </p>
             <div className="mt-8 space-y-4">
               {[
@@ -442,7 +433,6 @@ const Index = () => {
               ))}
             </div>
           </div>
-
           <div className="rounded-xl bg-white/10 p-6 backdrop-blur md:p-8">
             <h3 className="font-display text-xl font-semibold">Написать нам</h3>
             <form
@@ -456,9 +446,7 @@ const Index = () => {
               <Input name="name" placeholder="Ваше имя" className="border-white/20 bg-white/10 text-white placeholder:text-white/50" />
               <Input name="email" type="email" placeholder="Email" className="border-white/20 bg-white/10 text-white placeholder:text-white/50" />
               <Textarea name="msg" placeholder="Сообщение" rows={3} className="border-white/20 bg-white/10 text-white placeholder:text-white/50" />
-              <Button type="submit" className="w-full bg-dprk-red text-white hover:bg-dprk-red/90">
-                Отправить
-              </Button>
+              <Button type="submit" className="w-full bg-dprk-red text-white hover:bg-dprk-red/90">Отправить</Button>
             </form>
           </div>
         </div>
@@ -466,12 +454,7 @@ const Index = () => {
 
       <footer className="border-t border-border py-8">
         <div className="container mx-auto flex flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground sm:flex-row">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-dprk-red">
-              <Icon name="Trophy" size={16} className="text-white" />
-            </div>
-            <span className="font-display text-lg font-bold text-foreground">MCFA.26</span>
-          </div>
+          <Logo className="h-8" />
           <span>© 2026 MCFA · Minecraft Championship of Football Association</span>
         </div>
       </footer>
@@ -489,98 +472,11 @@ const SectionTitle = ({
   light?: boolean;
 }) => (
   <div>
-    <span
-      className={`text-sm font-semibold uppercase tracking-widest ${
-        light ? 'text-white/60' : 'text-dprk-red'
-      }`}
-    >
+    <span className={`text-sm font-semibold uppercase tracking-widest ${light ? 'text-white/60' : 'text-dprk-red'}`}>
       {sub}
     </span>
-    <h2 className="mt-1 font-display text-4xl font-bold uppercase md:text-5xl">
-      {children}
-    </h2>
+    <h2 className="mt-1 font-display text-4xl font-bold uppercase md:text-5xl">{children}</h2>
   </div>
 );
-
-const AdminPanel = ({
-  applicants,
-  setStatus,
-  pendingCount,
-}: {
-  applicants: Applicant[];
-  setStatus: (id: number, status: Applicant['status']) => void;
-  pendingCount: number;
-}) => {
-  const statusMap = {
-    pending: { label: 'Ожидает', cls: 'bg-amber-100 text-amber-700' },
-    approved: { label: 'Одобрен', cls: 'bg-emerald-100 text-emerald-700' },
-    rejected: { label: 'Отклонён', cls: 'bg-red-100 text-red-700' },
-  } as const;
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="relative">
-          <Icon name="Shield" size={18} />
-          {pendingCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-dprk-red text-[10px] font-bold text-white">
-              {pendingCount}
-            </span>
-          )}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display text-2xl">
-            <Icon name="Shield" size={22} className="text-dprk-red" />
-            Админ-панель · Заявки
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="max-h-[60vh] space-y-3 overflow-y-auto py-2">
-          {applicants.map((a) => (
-            <div
-              key={a.id}
-              className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{a.nick}</span>
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusMap[a.status].cls}`}>
-                    {statusMap[a.status].label}
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground">{a.team}</div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setStatus(a.id, 'approved')}
-                  disabled={a.status === 'approved'}
-                  className="bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  <Icon name="Check" size={16} className="mr-1" /> Одобрить
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setStatus(a.id, 'rejected')}
-                  disabled={a.status === 'rejected'}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Icon name="X" size={16} className="mr-1" /> Отклонить
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <DialogFooter className="text-sm text-muted-foreground">
-          Всего заявок: {applicants.length} · Ожидают: {pendingCount}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 export default Index;

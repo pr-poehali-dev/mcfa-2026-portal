@@ -1,0 +1,29 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Get published posts",
+      "method": "GET",
+      "path": "/?action=posts",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Register without required fields",
+      "method": "POST",
+      "path": "/?action=register",
+      "body": {"nick": ""},
+      "expectedStatus": 400
+    },
+    {
+      "name": "Applicants require admin auth",
+      "method": "GET",
+      "path": "/?action=applicants",
+      "expectedStatus": 401
+    }
+  ]
+}
