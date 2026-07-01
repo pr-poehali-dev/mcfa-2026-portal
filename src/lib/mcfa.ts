@@ -41,3 +41,13 @@ export type Post = {
   body: string;
   created_at: string;
 };
+
+export type Stream = {
+  id: number;
+  title: string;
+  url: string;
+  teams: string;
+  is_live: boolean;
+  scheduled_at: string | null;
+  created_at: string;
+};

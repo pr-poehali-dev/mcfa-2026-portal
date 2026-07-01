@@ -16,7 +16,7 @@ import Icon from '@/components/ui/icon';
 import { toast } from '@/hooks/use-toast';
 import Logo from '@/components/Logo';
 import AdminPanel from '@/components/AdminPanel';
-import { API, COUNTRIES, flagOf, type Post } from '@/lib/mcfa';
+import { API, COUNTRIES, flagOf, type Post, type Stream } from '@/lib/mcfa';
 
 const HERO_IMG =
   'https://cdn.poehali.dev/projects/03c39951-0df9-473a-9e75-b8e2a7af085a/files/1514e7b3-fe3b-4a86-b1a9-87b6f1549f23.jpg';
@@ -39,14 +39,11 @@ const STANDINGS = [
   { pos: 6, team: 'Египет', p: 5, w: 0, d: 1, l: 4, gd: '-14', pts: 1 },
 ];
 
-const STREAMS = [
-  { live: true, teams: 'КНДР — Китай', time: 'Идёт сейчас', viewers: '4 812' },
-  { live: false, teams: 'Россия — Иран', time: 'Сегодня 19:00', viewers: '—' },
-  { live: false, teams: 'Сербия — Египет', time: 'Завтра 17:30', viewers: '—' },
-];
+
 
 const Index = () => {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [streams, setStreams] = useState<Stream[]>([]);
   const [nick, setNick] = useState('');
   const [country, setCountry] = useState('');
   const [roleWish, setRoleWish] = useState('');
@@ -60,9 +57,15 @@ const Index = () => {
     if (res.ok) setPosts((await res.json()).posts);
   }, []);
 
+  const loadStreams = useCallback(async () => {
+    const res = await fetch(`${API}?action=streams`);
+    if (res.ok) setStreams((await res.json()).streams);
+  }, []);
+
   useEffect(() => {
     loadPosts();
-  }, [loadPosts]);
+    loadStreams();
+  }, [loadPosts, loadStreams]);
 
   const scrollTo = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -91,6 +94,7 @@ const Index = () => {
     setSubmitting(true);
     const res = await fetch(`${API}?action=register`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nick, country, role_wish: roleWish, skin }),
     });
     setSubmitting(false);
@@ -132,7 +136,7 @@ const Index = () => {
           </nav>
 
           <div className="flex items-center gap-2">
-            <AdminPanel onPostsChange={loadPosts} />
+            <AdminPanel onPostsChange={loadPosts} onStreamsChange={loadStreams} />
             <Button
               onClick={() => scrollTo('register')}
               className="hidden bg-dprk-red text-white hover:bg-dprk-red/90 sm:inline-flex"
@@ -356,30 +360,45 @@ const Index = () => {
       <section id="streams" className="border-b border-border py-20">
         <div className="container mx-auto px-4">
           <SectionTitle sub="Live">Трансляции матчей</SectionTitle>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {STREAMS.map((s, i) => (
-              <div key={i} className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-lg">
-                <div className="relative flex aspect-video items-center justify-center bg-dprk-blue">
-                  <Icon name="Play" size={44} className="text-white/80 transition-transform group-hover:scale-110" />
-                  {s.live ? (
-                    <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded bg-dprk-red px-2 py-1 text-xs font-bold text-white">
-                      <span className="inline-block h-2 w-2 animate-pulse-live rounded-full bg-white" />
-                      LIVE
-                    </span>
-                  ) : (
-                    <span className="absolute left-3 top-3 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white">Скоро</span>
-                  )}
-                </div>
-                <div className="p-4">
-                  <div className="font-semibold">{s.teams}</div>
-                  <div className="mt-1 flex items-center justify-between text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1"><Icon name="Clock" size={14} /> {s.time}</span>
-                    {s.live && <span className="flex items-center gap-1"><Icon name="Eye" size={14} /> {s.viewers}</span>}
+          {streams.length === 0 ? (
+            <p className="mt-8 text-muted-foreground">Трансляций пока нет. Скоро здесь появятся прямые эфиры.</p>
+          ) : (
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              {streams.map((s) => (
+                <a
+                  key={s.id}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-lg"
+                >
+                  <div className="relative flex aspect-video items-center justify-center bg-dprk-blue">
+                    <Icon name="Play" size={44} className="text-white/80 transition-transform group-hover:scale-110" />
+                    {s.is_live ? (
+                      <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded bg-dprk-red px-2 py-1 text-xs font-bold text-white">
+                        <span className="inline-block h-2 w-2 animate-pulse-live rounded-full bg-white" />
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="absolute left-3 top-3 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white">Скоро</span>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  <div className="p-4">
+                    <div className="font-semibold">{s.title}</div>
+                    {s.teams && (
+                      <div className="mt-0.5 text-sm text-muted-foreground">{s.teams}</div>
+                    )}
+                    {s.scheduled_at && !s.is_live && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Icon name="Clock" size={12} />
+                        {new Date(s.scheduled_at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
